@@ -1,0 +1,138 @@
+name: Publish Helm Chart
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      chart_version:
+        description: "Chart version to publish. Leave empty to use Chart.yaml version."
+        required: false
+        type: string
+      app_version:
+        description: "App version to set. Leave empty to use chart_version."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CHART_PATH: charts/esphome-device-builder
+  ARTIFACTHUB_REPO_METADATA_PATH: charts/esphome-device-builder/artifacthub-repo.yml
+  CHART_NAME: esphome-device-builder
+  ANDREYWTF_REGISTRY_HOST: registry.andrey.wtf
+  REGISTRY_REPO: charts
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
+
+      - name: Install GnuPG
+        run: sudo apt-get update && sudo apt-get install -y gnupg
+
+      - name: Resolve chart version
+        id: version
+        shell: bash
+        run: |
+          chart_app_version="$(awk '/^appVersion:/ {print $2; exit}' "${CHART_PATH}/Chart.yaml" | tr -d '"')"
+
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            chart_version="${GITHUB_REF_NAME#v}"
+          elif [ -n "${INPUT_CHART_VERSION}" ]; then
+            chart_version="${INPUT_CHART_VERSION}"
+          else
+            chart_version="$(awk '/^version:/ {print $2; exit}' "${CHART_PATH}/Chart.yaml" | tr -d '"')"
+          fi
+
+          app_version="${INPUT_APP_VERSION:-${chart_app_version}}"
+
+          if ! [[ "${chart_version}" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "chart_version must be a valid SemVer version, got '${chart_version}'." >&2
+            exit 1
+          fi
+
+          echo "chart_version=${chart_version}" >> "${GITHUB_OUTPUT}"
+          echo "app_version=${app_version}" >> "${GITHUB_OUTPUT}"
+        env:
+          INPUT_CHART_VERSION: ${{ github.event.inputs.chart_version }}
+          INPUT_APP_VERSION: ${{ github.event.inputs.app_version }}
+
+      - name: Import signing key
+        run: |
+          echo "${ANDREYWTF_GPG_PRIVATE_KEY}" | gpg --batch --import
+          gpg --batch --pinentry-mode loopback \
+            --passphrase "${ANDREYWTF_GPG_PASSPHRASE}" \
+            --export-secret-keys --output ./helm-secret.gpg "${ANDREYWTF_GPG_KEY_ID}"
+          HELM_SIGNING_KEY="$(gpg --batch --list-secret-keys --with-colons "${ANDREYWTF_GPG_KEY_ID}" | awk -F: '/^uid:/ {print $10; exit}')"
+          if [ -z "${HELM_SIGNING_KEY}" ]; then
+            echo "Failed to resolve signing key UID from imported secret key." >&2
+            exit 1
+          fi
+          echo "HELM_SIGNING_KEY=${HELM_SIGNING_KEY}" >> "$GITHUB_ENV"
+        env:
+          ANDREYWTF_GPG_PRIVATE_KEY: ${{ secrets.ANDREYWTF_GPG_PRIVATE_KEY }}
+          ANDREYWTF_GPG_KEY_ID: ${{ secrets.ANDREYWTF_GPG_KEY_ID }}
+          ANDREYWTF_GPG_PASSPHRASE: ${{ secrets.ANDREYWTF_GPG_PASSPHRASE }}
+
+      - name: Package chart
+        run: |
+          mkdir -p dist
+          helm lint "${CHART_PATH}"
+          printf '%s' "${ANDREYWTF_GPG_PASSPHRASE}" > /tmp/.gpg-passphrase
+          helm package "${CHART_PATH}" \
+            --version "${CHART_VERSION}" \
+            --app-version "${APP_VERSION}" \
+            --sign \
+            --key "${HELM_SIGNING_KEY}" \
+            --keyring ./helm-secret.gpg \
+            --passphrase-file /tmp/.gpg-passphrase \
+            --destination dist
+          rm -f /tmp/.gpg-passphrase
+        env:
+          ANDREYWTF_GPG_PASSPHRASE: ${{ secrets.ANDREYWTF_GPG_PASSPHRASE }}
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+
+      - name: Log in to registry
+        run: |
+          echo "${ANDREYWTF_REGISTRY_PASSWORD}" | helm registry login "${ANDREYWTF_REGISTRY_HOST}" \
+            --username "${ANDREYWTF_REGISTRY_USERNAME}" \
+            --password-stdin
+        env:
+          ANDREYWTF_REGISTRY_USERNAME: ${{ secrets.ANDREYWTF_REGISTRY_USERNAME }}
+          ANDREYWTF_REGISTRY_PASSWORD: ${{ secrets.ANDREYWTF_REGISTRY_PASSWORD }}
+
+      - name: Push chart
+        run: |
+          helm push "dist/${CHART_NAME}-${CHART_VERSION}.tgz" \
+            "oci://${ANDREYWTF_REGISTRY_HOST}/${REGISTRY_REPO}"
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+
+      - name: Log in to registry (ORAS)
+        run: |
+          echo "${ANDREYWTF_REGISTRY_PASSWORD}" | oras login "${ANDREYWTF_REGISTRY_HOST}" \
+            --username "${ANDREYWTF_REGISTRY_USERNAME}" \
+            --password-stdin
+        env:
+          ANDREYWTF_REGISTRY_USERNAME: ${{ secrets.ANDREYWTF_REGISTRY_USERNAME }}
+          ANDREYWTF_REGISTRY_PASSWORD: ${{ secrets.ANDREYWTF_REGISTRY_PASSWORD }}
+
+      - name: Push Artifact Hub repository metadata
+        run: |
+          oras push \
+            "${ANDREYWTF_REGISTRY_HOST}/${REGISTRY_REPO}/${CHART_NAME}:artifacthub.io" \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            "${ARTIFACTHUB_REPO_METADATA_PATH}:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml"
