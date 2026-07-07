@@ -1,0 +1,151 @@
+# Number of Device Builder pods. Keep this at 1 when using ReadWriteOnce storage.
+replicaCount: 1
+
+strategy:
+  type: RollingUpdate
+
+image:
+  # ESPHome documents this image as the standalone Device Builder container.
+  repository: ghcr.io/esphome/esphome
+  pullPolicy: IfNotPresent
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# Host networking is useful for mDNS discovery and OTA workflows on many LANs.
+hostNetwork:
+  enabled: false
+  dnsPolicy: ClusterFirstWithHostNet
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 6052
+  targetPort: http
+  annotations: {}
+  labels: {}
+  nodePort: null
+  externalTrafficPolicy: ""
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: esphome.example.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+dashboard:
+  # Mounted path used by ESPHome for YAML configurations and build state.
+  configPath: /config
+  port: 6052
+  # Optional comma-separated trusted domain allowlist for reverse proxies.
+  # Leave empty when your ingress/proxy forwards the original Host header.
+  trustedDomains: []
+  # Extra command-line args appended after: dashboard <configPath> --port <port>.
+  extraArgs: []
+
+auth:
+  # Enables ESPHOME_USERNAME / ESPHOME_PASSWORD for standalone dashboard auth.
+  enabled: false
+  username: ""
+  password: ""
+  existingSecret: ""
+  usernameKey: username
+  passwordKey: password
+
+remoteBuild:
+  # Exposes the Device Builder peer-link port. The feature itself is enabled in the UI.
+  enabled: false
+  port: 6055
+  host: 0.0.0.0
+  service:
+    enabled: true
+    port: 6055
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  annotations: {}
+  labels: {}
+
+env:
+  TZ: ""
+
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+initContainers: []
+sidecars: []
+
+resources: {}
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  enabled: false
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+runtimeClassName: ""
+schedulerName: ""
+terminationGracePeriodSeconds: 30

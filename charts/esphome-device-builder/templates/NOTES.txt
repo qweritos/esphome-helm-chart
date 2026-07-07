@@ -1,0 +1,19 @@
+ESPHome Device Builder has been installed.
+
+{{- if .Values.ingress.enabled }}
+Ingress hosts:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else if .Values.service.enabled }}
+Service:
+  {{ include "esphome-device-builder.fullname" . }}:{{ .Values.service.port }}
+
+Port-forward for local access:
+  kubectl port-forward svc/{{ include "esphome-device-builder.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+{{- else if .Values.hostNetwork.enabled }}
+Host networking is enabled and no Service was created.
+Access the dashboard on a selected node at port {{ .Values.dashboard.port }}.
+{{- end }}
+
+Configuration data is mounted at {{ .Values.dashboard.configPath }}.

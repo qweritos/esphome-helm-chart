@@ -1,0 +1,17 @@
+apiVersion: v2
+name: esphome-device-builder
+description: A Helm chart for ESPHome Device Builder
+type: application
+version: 0.1.0
+appVersion: "2026.6.0"
+home: https://esphome.io/
+icon: https://esphome.io/_static/favicon-512x512.png
+sources:
+  - https://github.com/esphome/device-builder
+  - https://github.com/esphome/esphome
+keywords:
+  - esphome
+  - device-builder
+  - iot
+  - home-assistant
+maintainers: []
