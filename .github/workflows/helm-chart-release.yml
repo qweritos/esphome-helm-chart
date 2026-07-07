@@ -2,7 +2,7 @@ name: Publish Helm Chart
 
 on:
   release:
-    types: [published]
+    types: [created]
   workflow_dispatch:
     inputs:
       chart_version:
