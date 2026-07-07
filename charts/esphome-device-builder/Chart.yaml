@@ -14,4 +14,6 @@ keywords:
   - device-builder
   - iot
   - home-assistant
-maintainers: []
+maintainers:
+  - name: Andrey Artamonychev
+    email: me@andrey.wtf
