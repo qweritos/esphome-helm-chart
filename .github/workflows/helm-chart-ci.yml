@@ -1,0 +1,50 @@
+name: Helm Chart CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CHART_PATH: charts/esphome-device-builder
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Lint chart
+        run: helm lint "${CHART_PATH}"
+
+      - name: Render default values
+        run: helm template test "${CHART_PATH}" >/tmp/esphome-device-builder-default.yaml
+
+      - name: Render ingress and remote build values
+        run: |
+          helm template test "${CHART_PATH}" \
+            --set=hostNetwork.enabled=true \
+            --set=remoteBuild.enabled=true \
+            --set=ingress.enabled=true \
+            --set=ingress.className=nginx-internal \
+            --set=ingress.hosts[0].host=esphome.example.local \
+            --set=ingress.hosts[0].paths[0].path=/ \
+            --set=ingress.hosts[0].paths[0].pathType=Prefix \
+            --set=ingress.tls[0].secretName=esphome-example-local-tls \
+            --set=ingress.tls[0].hosts[0]=esphome.example.local \
+            --set=dashboard.trustedDomains[0]=esphome.example.local \
+            --set=strategy.type=Recreate \
+            >/tmp/esphome-device-builder-feature.yaml
+
+      - name: Package chart
+        run: helm package "${CHART_PATH}" --destination /tmp
