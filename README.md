@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://media.esphome.io/logo/logo.png" alt="ESPHome" width="360">
+</p>
+
 # ESPHome Device Builder Helm Chart
 
 This repository contains a Helm chart for running ESPHome Device Builder on Kubernetes.
