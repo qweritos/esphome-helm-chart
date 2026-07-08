@@ -5,7 +5,7 @@ This chart deploys [ESPHome Device Builder](https://github.com/esphome/device-bu
 ## Install
 
 ```sh
-helm install esphome-device-builder ./charts/esphome-device-builder
+helm install esphome-device-builder oci://registry.andrey.wtf/charts/esphome-device-builder
 ```
 
 Expose it with ingress:

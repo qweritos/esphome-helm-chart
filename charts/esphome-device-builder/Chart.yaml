@@ -2,7 +2,7 @@ apiVersion: v2
 name: esphome-device-builder
 description: A Helm chart for ESPHome Device Builder
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "2026.6.0"
 home: https://esphome.io/
 icon: https://esphome.io/favicon.ico
